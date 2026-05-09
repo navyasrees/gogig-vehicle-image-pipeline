@@ -1,5 +1,7 @@
 import Fastify, { FastifyError } from "fastify";
 import multipart from "@fastify/multipart";
+import staticPlugin from "@fastify/static";
+import path from "path";
 import { env } from "./config/env";
 import { ensureUploadDir } from "./services/storage.service";
 import { uploadRoutes } from "./routes/upload.route";
@@ -14,6 +16,13 @@ app.register(multipart, {
   limits: {
     fileSize: env.storage.maxFileSizeMb * 1024 * 1024,
   },
+});
+
+// Serve public/ at GET / — register before API routes so dynamic routes
+// take priority (Fastify matches registered routes first, static is the fallback)
+app.register(staticPlugin, {
+  root: path.join(__dirname, "..", "public"),
+  prefix: "/",
 });
 
 // ---------------------------------------------------------------------------
@@ -31,8 +40,6 @@ app.register(multipart, {
 //   3. Everything else — 500 with the error message, never leaking a stack.
 // ---------------------------------------------------------------------------
 app.setErrorHandler((error: FastifyError, req, reply) => {
-  // @fastify/multipart sets code = "FST_FILES_LIMIT" or the error name
-  // "RequestFileTooLargeError" when the file size limit is exceeded
   if (
     error.code === "FST_FILES_LIMIT" ||
     error.message?.toLowerCase().includes("file too large") ||
@@ -43,12 +50,10 @@ app.setErrorHandler((error: FastifyError, req, reply) => {
     });
   }
 
-  // Fastify validation errors (malformed request body, wrong param type, etc.)
   if (error.statusCode === 400 && error.validation) {
     return reply.status(400).send({ error: error.message });
   }
 
-  // Log unexpected errors with full details server-side, return nothing useful to the client
   req.log.error({ err: error, path: req.url }, "Unhandled error");
   return reply.status(error.statusCode ?? 500).send({
     error: "An unexpected error occurred.",

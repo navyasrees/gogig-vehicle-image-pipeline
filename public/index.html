@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vehicle Image Pipeline</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0d0d14;
+      --surface:     #13131c;
+      --surface-2:   #1a1a26;
+      --border:      #26263a;
+      --text:        #d0d6f0;
+      --text-muted:  #5a5f7a;
+      --accent:      #7c5af3;
+      --accent-h:    #6644e8;
+      --success:     #34d399;
+      --success-bg:  rgba(52, 211, 153, 0.08);
+      --error:       #f87171;
+      --error-bg:    rgba(248, 113, 113, 0.08);
+      --warning:     #fbbf24;
+      --warning-bg:  rgba(251, 191, 36, 0.08);
+      --info:        #60a5fa;
+      --info-bg:     rgba(96, 165, 250, 0.08);
+      --radius:      10px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 2rem 1rem 4rem;
+    }
+
+    /* ── Layout ── */
+    .container { max-width: 860px; margin: 0 auto; }
+
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+    header h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #fff;
+    }
+    header p {
+      margin-top: 0.4rem;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    section h2 {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 1.2rem;
+    }
+
+    /* ── Drop Zone ── */
+    #drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    #drop-zone:hover,
+    #drop-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(124, 90, 243, 0.05);
+    }
+    #drop-zone .drop-icon {
+      font-size: 2.2rem;
+      margin-bottom: 0.75rem;
+    }
+    #drop-zone p {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-bottom: 0.3rem;
+    }
+    #drop-zone p.hint {
+      font-size: 0.75rem;
+      margin-top: 0.6rem;
+    }
+
+    .browse-btn {
+      display: inline-block;
+      margin: 0.6rem 0;
+      padding: 0.45rem 1.1rem;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      color: var(--text);
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .browse-btn:hover { background: var(--border); border-color: var(--accent); }
+
+    /* ── File List ── */
+    #file-list {
+      margin-top: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .file-item {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.5rem 0.8rem;
+      font-size: 0.85rem;
+    }
+    .file-item .file-icon { font-size: 1rem; }
+    .file-item .file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-item .file-size { color: var(--text-muted); font-size: 0.78rem; flex-shrink: 0; }
+    .file-item .remove-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+      padding: 0 0.2rem;
+      transition: color 0.15s;
+    }
+    .file-item .remove-btn:hover { color: var(--error); }
+
+    /* ── Controls ── */
+    .upload-controls {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    #analyze-btn {
+      padding: 0.6rem 1.4rem;
+      background: var(--accent);
+      border: none;
+      border-radius: 7px;
+      color: #fff;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    #analyze-btn:hover:not(:disabled) { background: var(--accent-h); }
+    #analyze-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    #upload-progress {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    /* ── Job Cards ── */
+    #cards-container {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .job-card {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.2rem;
+      transition: border-color 0.2s;
+    }
+    .job-card.status-completed { border-left: 3px solid var(--success); }
+    .job-card.status-failed    { border-left: 3px solid var(--error); }
+    .job-card.status-processing { border-left: 3px solid var(--info); }
+    .job-card.status-pending   { border-left: 3px solid var(--text-muted); }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.8rem;
+    }
+    .card-filename {
+      flex: 1;
+      font-size: 0.9rem;
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #fff;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.25rem 0.65rem;
+      border-radius: 20px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      flex-shrink: 0;
+    }
+    .badge-pending    { background: rgba(90,95,122,0.2); color: var(--text-muted); }
+    .badge-processing { background: var(--info-bg); color: var(--info); }
+    .badge-completed  { background: var(--success-bg); color: var(--success); }
+    .badge-failed     { background: var(--error-bg); color: var(--error); }
+
+    .spinner {
+      width: 8px; height: 8px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Results Table ── */
+    .results-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      margin-top: 0.5rem;
+    }
+    .results-table th {
+      text-align: left;
+      color: var(--text-muted);
+      font-weight: 500;
+      padding: 0.35rem 0.6rem;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .results-table td {
+      padding: 0.4rem 0.6rem;
+      border-bottom: 1px solid rgba(38,38,58,0.5);
+      vertical-align: middle;
+    }
+    .results-table tr:last-child td { border-bottom: none; }
+    .results-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+    .check-name { color: var(--text); }
+    .check-pass { color: var(--success); font-weight: 600; }
+    .check-fail { color: var(--error); font-weight: 600; }
+    .check-confidence { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+    .check-message {
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      max-width: 260px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .failure-reason {
+      margin-top: 0.5rem;
+      padding: 0.6rem 0.8rem;
+      background: var(--error-bg);
+      border-radius: 6px;
+      font-size: 0.82rem;
+      color: var(--error);
+    }
+
+    .card-loading {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      padding: 0.4rem 0;
+    }
+
+    /* ── History ── */
+    #history-container {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .empty-state {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      text-align: center;
+      padding: 1rem 0;
+    }
+
+    .history-item {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.65rem 0.9rem;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      font-size: 0.85rem;
+    }
+    .history-filename {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #fff;
+      font-weight: 500;
+    }
+    .history-summary {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+    .history-summary.all-pass { color: var(--success); }
+    .history-summary.some-fail { color: var(--warning); }
+    .history-time {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🚗 Vehicle Image Pipeline</h1>
+      <p>Upload vehicle images for async quality analysis</p>
+    </header>
+
+    <!-- ── Upload ── -->
+    <section id="upload-section">
+      <h2>Upload</h2>
+
+      <div id="drop-zone">
+        <div class="drop-icon">📸</div>
+        <p>Drag &amp; drop images here</p>
+        <label class="browse-btn">Browse files</label>
+        <input type="file" id="file-input" accept=".jpg,.jpeg,.png,.webp" multiple hidden />
+        <p class="hint">Accepted: JPG, PNG, WEBP · Max 10 MB each</p>
+      </div>
+
+      <div id="file-list"></div>
+
+      <div class="upload-controls">
+        <button id="analyze-btn" disabled>Analyze Images</button>
+        <span id="upload-progress"></span>
+      </div>
+    </section>
+
+    <!-- ── Processing ── -->
+    <section id="processing-section" style="display:none">
+      <h2>Processing</h2>
+      <div id="cards-container"></div>
+    </section>
+
+    <!-- ── History ── -->
+    <section id="history-section">
+      <h2>History — this session</h2>
+      <div id="history-container">
+        <p class="empty-state">No images processed this session.</p>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // ---------------------------------------------------------------------------
+    // State
+    // ---------------------------------------------------------------------------
+    let selectedFiles = [];               // File[]
+    const jobs = new Map();               // id → job object
+    const pollers = new Map();            // id → intervalId
+
+    // ---------------------------------------------------------------------------
+    // DOM refs
+    // ---------------------------------------------------------------------------
+    const dropZone       = document.getElementById("drop-zone");
+    const fileInput      = document.getElementById("file-input");
+    const fileList       = document.getElementById("file-list");
+    const analyzeBtn     = document.getElementById("analyze-btn");
+    const uploadProgress = document.getElementById("upload-progress");
+    const processingSection = document.getElementById("processing-section");
+    const cardsContainer = document.getElementById("cards-container");
+    const historyContainer = document.getElementById("history-container");
+
+    // ---------------------------------------------------------------------------
+    // Utilities
+    // ---------------------------------------------------------------------------
+    function formatBytes(bytes) {
+      if (bytes < 1024) return bytes + " B";
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+      return (bytes / 1024 / 1024).toFixed(1) + " MB";
+    }
+
+    function formatTime(date) {
+      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    }
+
+    const CHECK_LABELS = {
+      blur: "Blur",
+      brightness: "Brightness",
+      dimensions: "Dimensions",
+      duplicate: "Duplicate",
+      screenshot: "Screenshot",
+      numberplate: "Number Plate",
+      tamper: "Tamper",
+    };
+
+    function checkLabel(name) {
+      return CHECK_LABELS[name] ?? name;
+    }
+
+    // ---------------------------------------------------------------------------
+    // File selection
+    // ---------------------------------------------------------------------------
+    function addFiles(newFiles) {
+      const existing = new Set(selectedFiles.map(f => f.name + f.size));
+      for (const f of newFiles) {
+        if (!existing.has(f.name + f.size)) selectedFiles.push(f);
+      }
+      renderFileList();
+    }
+
+    function removeFile(index) {
+      selectedFiles.splice(index, 1);
+      renderFileList();
+    }
+
+    function renderFileList() {
+      fileList.innerHTML = "";
+      analyzeBtn.disabled = selectedFiles.length === 0;
+
+      selectedFiles.forEach((file, i) => {
+        const item = document.createElement("div");
+        item.className = "file-item";
+        item.innerHTML = `
+          <span class="file-icon">🖼</span>
+          <span class="file-name" title="${file.name}">${file.name}</span>
+          <span class="file-size">${formatBytes(file.size)}</span>
+          <button class="remove-btn" title="Remove" data-index="${i}">✕</button>
+        `;
+        item.querySelector(".remove-btn").addEventListener("click", () => removeFile(i));
+        fileList.appendChild(item);
+      });
+    }
+
+    // Drag & drop
+    dropZone.addEventListener("dragenter", e => { e.preventDefault(); dropZone.classList.add("drag-over"); });
+    dropZone.addEventListener("dragover",  e => { e.preventDefault(); dropZone.classList.add("drag-over"); });
+    dropZone.addEventListener("dragleave", e => { dropZone.classList.remove("drag-over"); });
+    dropZone.addEventListener("drop", e => {
+      e.preventDefault();
+      dropZone.classList.remove("drag-over");
+      const files = Array.from(e.dataTransfer.files).filter(isAccepted);
+      if (files.length) addFiles(files);
+    });
+
+    // Click to browse
+    dropZone.addEventListener("click", e => {
+      if (e.target.classList.contains("browse-btn") || e.target === dropZone || e.target.closest("#drop-zone")) {
+        fileInput.click();
+      }
+    });
+    fileInput.addEventListener("change", () => {
+      const files = Array.from(fileInput.files).filter(isAccepted);
+      addFiles(files);
+      fileInput.value = "";
+    });
+
+    function isAccepted(file) {
+      return /\.(jpe?g|png|webp)$/i.test(file.name);
+    }
+
+    // ---------------------------------------------------------------------------
+    // Upload flow
+    // ---------------------------------------------------------------------------
+    analyzeBtn.addEventListener("click", startUpload);
+
+    async function startUpload() {
+      if (selectedFiles.length === 0) return;
+
+      const filesToUpload = [...selectedFiles];
+      selectedFiles = [];
+      renderFileList();
+      analyzeBtn.disabled = true;
+
+      processingSection.style.display = "";
+
+      for (let i = 0; i < filesToUpload.length; i++) {
+        const file = filesToUpload[i];
+        uploadProgress.textContent = `Uploading ${i + 1} / ${filesToUpload.length}…`;
+        await uploadFile(file);
+      }
+
+      uploadProgress.textContent = "";
+    }
+
+    async function uploadFile(file) {
+      // Create card immediately in "uploading" state
+      const tempId = "temp-" + Date.now() + "-" + file.name;
+      createCard(tempId, file.name, "pending");
+
+      try {
+        const form = new FormData();
+        form.append("image", file, file.name);
+
+        const res = await fetch("/upload", { method: "POST", body: form });
+        const body = await res.json();
+
+        if (!res.ok) {
+          updateCardError(tempId, body.error ?? `Upload failed (${res.status})`);
+          return;
+        }
+
+        const { id } = body;
+
+        // Replace temp card with real one keyed by id
+        // Must also update inner element IDs so updateCardStatus/updateCardResults
+        // can find badge-${id} and body-${id} by their new IDs.
+        const cardEl = document.getElementById(`card-${tempId}`);
+        if (cardEl) {
+          cardEl.id = `card-${id}`;
+          const badge = document.getElementById(`badge-${tempId}`);
+          if (badge) badge.id = `badge-${id}`;
+          const body = document.getElementById(`body-${tempId}`);
+          if (body) body.id = `body-${id}`;
+        }
+
+        jobs.set(id, { id, filename: file.name, status: "pending", results: null, failureReason: null, startTime: new Date() });
+        startPolling(id);
+      } catch (err) {
+        updateCardError(tempId, "Network error: " + err.message);
+      }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Card rendering
+    // ---------------------------------------------------------------------------
+    function createCard(id, filename, status) {
+      const card = document.createElement("div");
+      card.className = `job-card status-${status}`;
+      card.id = `card-${id}`;
+      card.innerHTML = `
+        <div class="card-header">
+          <span class="card-filename" title="${filename}">${filename}</span>
+          <span class="badge badge-${status}" id="badge-${id}">${badgeContent(status)}</span>
+        </div>
+        <div class="card-body" id="body-${id}">
+          <div class="card-loading">
+            <span class="spinner"></span>
+            <span>Waiting for worker…</span>
+          </div>
+        </div>
+      `;
+      cardsContainer.prepend(card);
+    }
+
+    function badgeContent(status) {
+      if (status === "processing") return `<span class="spinner"></span> Processing`;
+      if (status === "pending")    return "Pending";
+      if (status === "completed")  return "✓ Completed";
+      if (status === "failed")     return "✗ Failed";
+      return status;
+    }
+
+    function updateCardStatus(id, status) {
+      const card  = document.getElementById(`card-${id}`);
+      const badge = document.getElementById(`badge-${id}`);
+      if (!card || !badge) return;
+
+      card.className = `job-card status-${status}`;
+      badge.className = `badge badge-${status}`;
+      badge.innerHTML = badgeContent(status);
+    }
+
+    function updateCardResults(id, results) {
+      const body = document.getElementById(`body-${id}`);
+      if (!body) return;
+
+      const rows = results.map(r => `
+        <tr>
+          <td class="check-name">${checkLabel(r.checkName)}</td>
+          <td class="${r.passed ? "check-pass" : "check-fail"}">${r.passed ? "✓" : "✗"}</td>
+          <td class="check-confidence">${r.confidence.toFixed(2)}</td>
+          <td class="check-message" title="${r.message ?? ""}">${r.message ?? "—"}</td>
+        </tr>
+      `).join("");
+
+      body.innerHTML = `
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th>Check</th>
+              <th>Result</th>
+              <th>Confidence</th>
+              <th>Message</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    }
+
+    function updateCardFailure(id, reason) {
+      const body = document.getElementById(`body-${id}`);
+      if (!body) return;
+      body.innerHTML = `<div class="failure-reason">⚠ ${reason ?? "Unknown error"}</div>`;
+    }
+
+    function updateCardError(tempId, message) {
+      updateCardStatus(tempId, "failed");
+      updateCardFailure(tempId, message);
+    }
+
+    // ---------------------------------------------------------------------------
+    // Polling
+    // ---------------------------------------------------------------------------
+    function startPolling(id) {
+      const interval = setInterval(async () => {
+        try {
+          const res = await fetch(`/status/${id}`);
+          if (!res.ok) return;
+          const { status } = await res.json();
+
+          updateCardStatus(id, status);
+
+          if (status === "completed") {
+            stopPolling(id);
+            const res2 = await fetch(`/results/${id}`);
+            const data = await res2.json();
+            const results = data.results ?? [];
+            updateCardResults(id, results);
+            const job = jobs.get(id);
+            if (job) { job.status = "completed"; job.results = results; }
+            addToHistory(id);
+          } else if (status === "failed") {
+            stopPolling(id);
+            const res2 = await fetch(`/failure/${id}`);
+            const data = await res2.json();
+            updateCardFailure(id, data.failureReason);
+            const job = jobs.get(id);
+            if (job) { job.status = "failed"; job.failureReason = data.failureReason; }
+            addToHistory(id);
+          }
+        } catch (_) {
+          // Network blip — keep polling, don't crash
+        }
+      }, 2000);
+
+      pollers.set(id, interval);
+    }
+
+    function stopPolling(id) {
+      const interval = pollers.get(id);
+      if (interval != null) {
+        clearInterval(interval);
+        pollers.delete(id);
+      }
+    }
+
+    // ---------------------------------------------------------------------------
+    // History
+    // ---------------------------------------------------------------------------
+    function addToHistory(id) {
+      const job = jobs.get(id);
+      if (!job) return;
+
+      // Remove empty state
+      const empty = historyContainer.querySelector(".empty-state");
+      if (empty) empty.remove();
+
+      const passed  = (job.results ?? []).filter(r => r.passed).length;
+      const total   = (job.results ?? []).length;
+      const summary = job.status === "failed"
+        ? "Job failed"
+        : `${passed}/${total} checks passed`;
+      const summaryClass = job.status === "failed" || passed < total ? "some-fail" : "all-pass";
+
+      const item = document.createElement("div");
+      item.className = "history-item";
+      item.innerHTML = `
+        <span class="history-filename" title="${job.filename}">${job.filename}</span>
+        <span class="history-summary ${summaryClass}">${summary}</span>
+        <span class="history-time">${formatTime(job.startTime)}</span>
+      `;
+      historyContainer.prepend(item);
+    }
+  </script>
+</body>
+</html>

@@ -78,7 +78,7 @@ Worker and API share a process for simplicity. The worker is already a self-cont
 
 ## AI Usage Disclosure
 
-Claude generated boilerplate, check implementations, controller logic, and error handling patterns. All AI output was reviewed and validated: thresholds were questioned (blur variance threshold, Laplacian kernel selection over raw pixel variance), logic was traced through, and incorrect decisions were caught and corrected.
+Claude generated boilerplate, check implementations, controller logic, error handling patterns, and the entire frontend (`public/index.html`). All AI output was reviewed and validated: thresholds were questioned (blur variance threshold, Laplacian kernel selection over raw pixel variance), logic was traced through, and incorrect decisions were caught and corrected.
 
 Specific corrections made during the build:
 
@@ -86,6 +86,7 @@ Specific corrections made during the build:
 - **Blur check used raw pixel variance** — the initial implementation measured scene contrast, not sharpness. Identified as content-sensitive (a blurry colourful scene outscores a sharp white wall). Corrected to Laplacian convolution, which measures edge response specifically.
 - **Worker concurrency was hardcoded to 5** — flagged as a concern at write time but shipped anyway. Identified as inconsistent (knowing something is wrong and not acting on it is worse than not knowing). Reduced to 2, made configurable via `WORKER_CONCURRENCY`.
 - **Screenshot check confidence: 0 on clear pass** — `triggeredCount / 3` means 0 signals = confidence 0. Semantically awkward (high confidence in a pass reads as 0). Documented as a known limitation rather than changed, since the brief specified signals-based confidence.
+- **UI card IDs not fully swapped on upload response** — when the server returned the real image `id`, the code updated the outer card element's `id` (`card-${tempId}` → `card-${id}`) but left the inner badge and body elements still keyed to `tempId`. Polling then looked up `badge-${id}` and `body-${id}` — elements that didn't exist — so the card stayed frozen at "Pending / Waiting for worker…" indefinitely even after processing completed. Corrected to swap all three IDs atomically.
 
 ---
 
@@ -116,6 +117,27 @@ Added after identifying that worker retries could produce duplicate result rows 
 
 **Monolith with clean extraction boundary**
 Worker and API share a process. Structured so the worker can be moved to a separate entry point without refactoring. Tradeoff: cannot scale independently right now. Acceptable for this scope, documented honestly.
+
+---
+
+## Frontend
+
+A single-page UI is served at `GET /` from `public/index.html`. No framework, no build step — vanilla HTML, CSS, and JavaScript served directly by `@fastify/static`.
+
+**Three sections:**
+
+**Upload** — drag-and-drop zone that accepts `.jpg`, `.jpeg`, `.png`, and `.webp` files. Files can also be selected via a browse button. Multiple files can be queued before submission. Each file is shown with its name, size, and a remove button. The "Analyse" button is disabled until at least one file is queued.
+
+**Processing** — a live job board. Each uploaded image gets a card immediately (before the server responds), showing a spinner and "Pending / Waiting for worker…". Once the server returns the real image `id`, polling begins at 2-second intervals against `GET /status/:id`. When status transitions to `completed`, the card fetches `GET /results/:id` and renders a table of all 7 checks with pass/fail indicators, confidence scores, and messages. If the job `failed`, it fetches `GET /failure/:id` and shows the failure reason instead.
+
+**History** — a compact log of every completed or failed job in the current session. Shows filename, a `n/7 checks passed` summary (or "Job failed"), and the time the upload started. New entries are prepended so the most recent appears first.
+
+**Implementation notes:**
+
+- Cards are created with a `tempId` immediately on submit (before the `POST /upload` response) so the UI feels instant. When the real `id` arrives, the outer card element and both inner elements (`badge-*`, `body-*`) are all re-keyed to the real id atomically, so subsequent DOM lookups by the poller always resolve correctly.
+- Polling stops as soon as the terminal status (`completed` or `failed`) is observed; the interval is cleared and removed from the poller map.
+- Network blips during polling are swallowed silently — the interval keeps running and retries on the next tick.
+- Accepted MIME types are enforced client-side by filtering on file extension (`.jpe?g|png|webp`) before files are added to the queue.
 
 ---
 
