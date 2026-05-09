@@ -10,7 +10,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "worker": "ts-node src/worker/image.worker.ts"
+    "worker": "ts-node src/worker/image.worker.ts",
+    "seed": "ts-node scripts/seed.ts"
   },
   "dependencies": {
     "@fastify/multipart": "^10.0.0",
