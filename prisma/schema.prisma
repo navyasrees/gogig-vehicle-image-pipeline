@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ImageStatus {
+  pending
+  processing
+  completed
+  failed
+}
+
+model Image {
+  id        String   @id @default(uuid())
+  filename  String
+  filepath  String
+  status ImageStatus @default(pending)
+  phash     String?  // perceptual hash for duplicate detection
+  failureReason String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  analysisResults AnalysisResult[]
+
+  @@map("images")
+}
+
+model AnalysisResult {
+  id         String  @id @default(uuid())
+  imageId    String  @map("image_id")
+  checkName  String  @map("check_name")
+  passed     Boolean
+  confidence Float
+  message    String?
+
+  image Image @relation(fields: [imageId], references: [id], onDelete: Cascade)
+
+  @@unique([imageId, checkName]) // prevents duplicate rows on worker retry
+  @@map("analysis_results")
+}
